@@ -115,11 +115,17 @@ export default function StyleManager() {
 
 
   const handleActivateStyle = async (styleId: string) => {
+    console.log('handleActivateStyle called with styleId:', styleId);
+    console.log('Current activeStyleId:', activeStyleId);
+
     setIsActivating(true);
     try {
       const success = await activateStyle(styleId);
+      console.log('activateStyle result:', success);
+
       if (success) {
         setActiveStyleId(styleId);
+        console.log('Style activated successfully');
       } else {
         alert('Failed to activate style. Please try again.');
       }
