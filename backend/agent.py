@@ -2,6 +2,7 @@
 # pip install fastapi uvicorn supabase anthropic resend python-dotenv
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -14,6 +15,15 @@ from resend import Resend
 load_dotenv()
 
 app = FastAPI()
+
+# Configure CORS to allow frontend to call backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize clients
 supabase: Client = create_client(
@@ -87,35 +97,50 @@ async def create_style(request: CreateStyleRequest):
 def generate_style_config_from_prompt(user_prompt: str) -> dict:
     """
     Use Claude to convert user's natural language into structured style JSON
+    that matches the frontend's exact requirements
     """
-    
-    system_prompt = """You are an email styling configuration generator.
 
-Convert the user's styling preferences into a JSON configuration for HTML emails.
+    system_prompt = """You are an email CSS style generator for a template preview system.
 
-The JSON should include styling for these elements (only include ones relevant to the user's request):
-- container: max_width, padding, background_color, font_family
-- headings: h1, h2, h3 with font_size, color, font_weight, margin
-- paragraph: font_size, color, line_height, margin
-- links: color, text_decoration, font_weight
-- table: border, width, border_collapse
-- table_header: background_color, padding, font_weight, color
-- table_cell: padding, border, color
-- button: background_color, color, padding, border_radius, font_size
-- image: max_width, margin
-- footer: font_size, color, text_align
+Convert the user's styling preferences into a JSON configuration with complete inline CSS strings for each email element.
 
-RULES:
-1. Return ONLY valid JSON, no explanations
-2. Use hex colors (e.g., #333333)
-3. Include units for sizes (px, %, em)
-4. Only use CSS properties that work in emails
-5. Be comprehensive but reasonable
+You MUST return a JSON object with these EXACT keys, where each value is a complete CSS string that can be applied as inline styles:
 
-Return the style configuration JSON:"""
+{
+  "email_container": "complete CSS string for main container (background, padding, border-radius, etc)",
+  "sender_section": "display: flex; align-items: center; gap: 16px; margin-bottom: 24px;",
+  "sender_avatar": "width: 48px; height: 48px; border-radius: 50%; background: [color/gradient]; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600;",
+  "sender_name": "font-size: 16px; font-weight: 600; color: [color];",
+  "sender_email": "font-size: 14px; color: [color]; opacity: 0.8;",
+  "timestamp": "font-size: 12px; color: [color]; opacity: 0.6;",
+  "subject": "font-size: 24px; font-weight: 700; color: [color]; margin-bottom: 16px;",
+  "paragraph": "font-size: 16px; line-height: 1.6; color: [color]; margin-bottom: 16px;",
+  "quote_block": "border-left: 4px solid [color]; background-color: [color]; padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-style: italic; color: [color];",
+  "table": "width: 100%; border-collapse: collapse; margin: 16px 0;",
+  "table_header": "background-color: [color]; color: [color]; padding: 12px; text-align: left; border: 1px solid [color]; font-weight: 600;",
+  "table_cell": "padding: 12px; border: 1px solid [color]; color: [color];",
+  "list": "margin: 16px 0; padding-left: 24px; color: [color];",
+  "list_item": "margin-bottom: 8px; line-height: 1.6;",
+  "button": "display: inline-block; padding: 12px 32px; background: [color/gradient]; color: [color]; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;",
+  "link": "color: [color]; text-decoration: underline;",
+  "image": "max-width: 100%; height: auto; border-radius: 8px; margin: 16px 0;",
+  "footer": "margin-top: 32px; padding-top: 16px; border-top: 1px solid [color]; text-align: center; font-size: 12px; color: [color];"
+}
+
+IMPORTANT RULES:
+1. Return ONLY valid JSON, no markdown backticks, no explanations
+2. Every value MUST be a complete CSS string with semicolons between properties
+3. Use hex colors (e.g., #333333) or CSS gradients
+4. Be creative and match the user's style request
+5. For cyberpunk: use neon colors (#00ffff, #ff00ff), dark backgrounds
+6. For minimal: use clean colors, lots of white space
+7. For warm: use coral, peach, cream colors
+8. For corporate: use navy, gold, professional colors
+
+Return ONLY the JSON object:"""
 
     message = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-3-5-haiku-20241022",  # Using latest Haiku model
         max_tokens=4096,
         messages=[
             {
@@ -124,7 +149,7 @@ Return the style configuration JSON:"""
             }
         ]
     )
-    
+
     # Clean response
     response_text = message.content[0].text.strip()
     if response_text.startswith('```'):
@@ -132,7 +157,7 @@ Return the style configuration JSON:"""
         if response_text.startswith('json'):
             response_text = response_text[4:]
         response_text = response_text.strip()
-    
+
     return json.loads(response_text)
 
 
