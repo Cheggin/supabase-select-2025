@@ -319,7 +319,7 @@ export default function DynamicEmailPreview({
                   <div style="margin: 16px 0;">
                     ${emailContent.body.links
                       .filter(link => !link.isButton)
-                      .map((link, index) => `${index > 0 ? ' ' : ''}<a href="${link.url}" style="${styles.link}">${link.text}</a>`)
+                      .map((link, i) => `${i > 0 ? ' ' : ''}<a href="${link.url}" style="${styles.link}">${link.text}</a>`)
                       .join('')}
                   </div>
                 </div>
@@ -341,7 +341,7 @@ export default function DynamicEmailPreview({
                     </style>
                     ${emailContent.body.links
                       .filter(link => link.isButton)
-                      .map((link, index) => `
+                      .map((link) => `
                         <a href="${link.url}" class="email-button" style="${styles.link_button}; margin: 8px; display: inline-block;">${link.text}</a>
                       `)
                       .join('')}
