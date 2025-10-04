@@ -1,25 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Define type directly to avoid import issues
+// Define type for styleable email content only (matches Gmail sections)
 interface EmailStyleJSON {
-  email_container: string;
-  sender_section: string;
-  sender_avatar: string;
-  sender_name: string;
-  sender_email: string;
-  timestamp: string;
-  subject: string;
+  email_body: string;
+  background_color: string;
+  header_section: string;
+  header_title: string;
+  header_subtitle: string;
+  text_section: string;
   paragraph: string;
-  quote_block: string;
+  bold_text: string;
+  italic_text: string;
+  links_section: string;
+  link: string;
+  link_button: string;
+  list_section: string;
+  unordered_list: string;
+  ordered_list: string;
+  list_item: string;
+  table_section: string;
   table: string;
   table_header: string;
   table_cell: string;
-  list: string;
-  list_item: string;
-  button: string;
-  link: string;
-  image: string;
-  footer: string;
+  signature_section: string;
+  signature_text: string;
+  divider: string;
 }
 
 // Initialize Supabase client
@@ -42,7 +47,7 @@ interface EmailStyleRecord {
 }
 
 // Save email styles to Supabase with prompt
-export async function saveEmailStyle(styles: EmailStyleJSON, prompt: string = ''): Promise<{ id: string; error?: string }> {
+export async function saveEmailStyle(styles: EmailStyleJSON, prompt: string = ''): Promise<{ id?: string; error?: string }> {
   try {
     const { data, error } = await supabase
       .from('email_styles')
@@ -56,13 +61,13 @@ export async function saveEmailStyle(styles: EmailStyleJSON, prompt: string = ''
 
     if (error) {
       console.error('Error saving style:', error);
-      return { id: '', error: error.message };
+      return { error: error.message };
     }
 
     return { id: data.id };
   } catch (error) {
     console.error('Error saving style:', error);
-    return { id: '', error: 'Failed to save style' };
+    return { error: 'Failed to save style' };
   }
 }
 
@@ -124,5 +129,58 @@ export async function deleteStyle(id: string): Promise<boolean> {
   } catch (error) {
     console.error('Error deleting style:', error);
     return false;
+  }
+}
+
+// Activate a style by ID (deactivates all others)
+export async function activateStyle(id: string): Promise<boolean> {
+  try {
+    // First deactivate all styles
+    const { error: deactivateError } = await supabase
+      .from('email_styles')
+      .update({ active: false })
+      .eq('active', true);
+
+    if (deactivateError) {
+      console.error('Error deactivating styles:', deactivateError);
+      return false;
+    }
+
+    // Then activate the selected style
+    const { error: activateError } = await supabase
+      .from('email_styles')
+      .update({ active: true })
+      .eq('id', id);
+
+    if (activateError) {
+      console.error('Error activating style:', activateError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error activating style:', error);
+    return false;
+  }
+}
+
+// Get the active style
+export async function getActiveStyle(): Promise<EmailStyleRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from('email_styles')
+      .select('*')
+      .eq('active', true)
+      .single();
+
+    if (error) {
+      console.error('Error fetching active style:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching active style:', error);
+    return null;
   }
 }

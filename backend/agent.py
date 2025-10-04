@@ -100,42 +100,48 @@ def generate_style_config_from_prompt(user_prompt: str) -> dict:
     that matches the frontend's exact requirements
     """
 
-    system_prompt = """You are an email CSS style generator for a template preview system.
+    system_prompt = """You are an email CSS style generator for a Gmail-compatible template system.
 
 Convert the user's styling preferences into a JSON configuration with complete inline CSS strings for each email element.
 
-You MUST return a JSON object with these EXACT keys, where each value is a complete CSS string that can be applied as inline styles:
+You MUST return a JSON object with these EXACT keys, where each value is a complete CSS string:
 
 {
-  "email_container": "complete CSS string for main container (background, padding, border-radius, etc)",
-  "sender_section": "display: flex; align-items: center; gap: 16px; margin-bottom: 24px;",
-  "sender_avatar": "width: 48px; height: 48px; border-radius: 50%; background: [color/gradient]; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600;",
-  "sender_name": "font-size: 16px; font-weight: 600; color: [color];",
-  "sender_email": "font-size: 14px; color: [color]; opacity: 0.8;",
-  "timestamp": "font-size: 12px; color: [color]; opacity: 0.6;",
-  "subject": "font-size: 24px; font-weight: 700; color: [color]; margin-bottom: 16px;",
-  "paragraph": "font-size: 16px; line-height: 1.6; color: [color]; margin-bottom: 16px;",
-  "quote_block": "border-left: 4px solid [color]; background-color: [color]; padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-style: italic; color: [color];",
-  "table": "width: 100%; border-collapse: collapse; margin: 16px 0;",
-  "table_header": "background-color: [color]; color: [color]; padding: 12px; text-align: left; border: 1px solid [color]; font-weight: 600;",
-  "table_cell": "padding: 12px; border: 1px solid [color]; color: [color];",
-  "list": "margin: 16px 0; padding-left: 24px; color: [color];",
-  "list_item": "margin-bottom: 8px; line-height: 1.6;",
-  "button": "display: inline-block; padding: 12px 32px; background: [color/gradient]; color: [color]; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;",
-  "link": "color: [color]; text-decoration: underline;",
-  "image": "max-width: 100%; height: auto; border-radius: 8px; margin: 16px 0;",
-  "footer": "margin-top: 32px; padding-top: 16px; border-top: 1px solid [color]; text-align: center; font-size: 12px; color: [color];"
+  "email_body": "font-family: Arial, sans-serif; color: #202124; font-size: 14px;",
+  "background_color": "#ffffff",
+  "header_section": "margin-bottom: 24px;",
+  "header_title": "font-size: 28px; font-weight: 600; color: [color]; margin: 0 0 8px 0;",
+  "header_subtitle": "font-size: 16px; color: [color]; margin: 0;",
+  "text_section": "margin-bottom: 24px;",
+  "paragraph": "font-size: 14px; line-height: 1.6; color: [color]; margin: 12px 0;",
+  "bold_text": "font-weight: 600;",
+  "italic_text": "font-style: italic;",
+  "links_section": "margin-bottom: 24px;",
+  "link": "color: [color]; text-decoration: none; margin-right: 16px;",
+  "link_button": "display: inline-block; padding: 10px 20px; background: [color]; color: white; text-decoration: none; border-radius: 4px; margin-right: 8px;",
+  "list_section": "margin-bottom: 24px;",
+  "unordered_list": "margin: 12px 0; padding-left: 20px;",
+  "ordered_list": "margin: 12px 0; padding-left: 20px;",
+  "list_item": "margin: 6px 0; line-height: 1.5;",
+  "table_section": "margin-bottom: 24px;",
+  "table": "width: 100%; border-collapse: collapse;",
+  "table_header": "background: #f8f9fa; padding: 12px; text-align: left; border: 1px solid #e8eaed; font-weight: 600;",
+  "table_cell": "padding: 12px; border: 1px solid #e8eaed;",
+  "signature_section": "margin-top: 32px;",
+  "signature_text": "color: #5f6368; font-size: 13px; line-height: 1.4;",
+  "divider": "border-top: 1px solid #e8eaed; margin-bottom: 16px;"
 }
 
 IMPORTANT RULES:
 1. Return ONLY valid JSON, no markdown backticks, no explanations
-2. Every value MUST be a complete CSS string with semicolons between properties
-3. Use hex colors (e.g., #333333) or CSS gradients
-4. Be creative and match the user's style request
-5. For cyberpunk: use neon colors (#00ffff, #ff00ff), dark backgrounds
-6. For minimal: use clean colors, lots of white space
-7. For warm: use coral, peach, cream colors
-8. For corporate: use navy, gold, professional colors
+2. background_color must be ONLY a hex color (e.g., "#f0f0f0"), not a CSS string
+3. Every other value MUST be a complete CSS string with semicolons
+4. Use hex colors (e.g., #333333) for all color values
+5. For dark themes: use dark background_color (#1a1a1a, #000000) with light text colors
+6. For cyberpunk: neon colors (#00ffff, #ff00ff) with black background
+7. For minimal: white background (#ffffff) with gray text (#5f6368)
+8. For warm: cream background (#faf9f6) with brown text (#3d2e2e)
+9. For corporate: white background with navy/blue accents (#003366, #1a73e8)
 
 Return ONLY the JSON object:"""
 

@@ -1,50 +1,60 @@
-import { useState, useEffect } from 'react';
-import { saveEmailStyle, getSavedStyles } from '../services/supabase';
+import { useState, useEffect, useCallback } from 'react';
+import { saveEmailStyle, getSavedStyles, activateStyle, getActiveStyle } from '../services/supabase';
 import { generateEmailStylesFromPrompt } from '../services/llmStyleGenerator';
 import DynamicEmailPreview from './DynamicEmailPreview';
 
-// Define type directly to avoid import issues
+// Define type for styleable email content only
 interface EmailStyleJSON {
-  email_container: string;
-  sender_section: string;
-  sender_avatar: string;
-  sender_name: string;
-  sender_email: string;
-  timestamp: string;
-  subject: string;
+  email_body: string;
+  background_color: string;
+  header_section: string;
+  header_title: string;
+  header_subtitle: string;
+  text_section: string;
   paragraph: string;
-  quote_block: string;
+  bold_text: string;
+  italic_text: string;
+  links_section: string;
+  link: string;
+  link_button: string;
+  list_section: string;
+  unordered_list: string;
+  ordered_list: string;
+  list_item: string;
+  table_section: string;
   table: string;
   table_header: string;
   table_cell: string;
-  list: string;
-  list_item: string;
-  button: string;
-  link: string;
-  image: string;
-  footer: string;
+  signature_section: string;
+  signature_text: string;
+  divider: string;
 }
 
-// Default style to always show in preview
+// Default style - what Gmail actually lets you customize
 const defaultStyle: EmailStyleJSON = {
-  email_container: 'background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);',
-  sender_section: 'display: flex; align-items: center; gap: 16px; margin-bottom: 24px;',
-  sender_avatar: 'width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600;',
-  sender_name: 'font-size: 16px; font-weight: 600; color: #1a1a1a;',
-  sender_email: 'font-size: 14px; color: #6b7280;',
-  timestamp: 'font-size: 12px; color: #9ca3af;',
-  subject: 'font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 16px;',
-  paragraph: 'font-size: 16px; line-height: 1.6; color: #374151; margin-bottom: 16px;',
-  quote_block: 'border-left: 4px solid #8b5cf6; background-color: #f3f4f6; padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; color: #4b5563; font-style: italic;',
-  table: 'width: 100%; border-collapse: collapse; margin: 16px 0;',
-  table_header: 'background-color: #f9fafb; color: #111827; padding: 12px; text-align: left; border: 1px solid #e5e7eb; font-weight: 600;',
-  table_cell: 'padding: 12px; border: 1px solid #e5e7eb; color: #374151;',
-  list: 'margin: 16px 0; padding-left: 24px; color: #374151;',
-  list_item: 'margin-bottom: 8px; line-height: 1.6;',
-  button: 'display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;',
-  link: 'color: #6366f1; text-decoration: underline;',
-  image: 'max-width: 100%; height: auto; border-radius: 8px; margin: 16px 0;',
-  footer: 'margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af;'
+  email_body: 'font-family: Arial, sans-serif; color: #202124; font-size: 14px;',
+  background_color: '#ffffff',
+  header_section: 'margin-bottom: 24px;',
+  header_title: 'font-size: 28px; font-weight: 600; color: #202124; margin: 0 0 8px 0;',
+  header_subtitle: 'font-size: 16px; color: #5f6368; margin: 0;',
+  text_section: 'margin-bottom: 24px;',
+  paragraph: 'font-size: 14px; line-height: 1.6; color: #202124; margin: 12px 0;',
+  bold_text: 'font-weight: 600;',
+  italic_text: 'font-style: italic;',
+  links_section: 'margin-bottom: 24px;',
+  link: 'color: #1155cc; text-decoration: none; margin-right: 16px;',
+  link_button: 'display: inline-block; padding: 10px 20px; background: #1a73e8; color: white; text-decoration: none; border-radius: 4px; margin-right: 8px;',
+  list_section: 'margin-bottom: 24px;',
+  unordered_list: 'margin: 12px 0; padding-left: 20px;',
+  ordered_list: 'margin: 12px 0; padding-left: 20px;',
+  list_item: 'margin: 6px 0; line-height: 1.5;',
+  table_section: 'margin-bottom: 24px;',
+  table: 'width: 100%; border-collapse: collapse;',
+  table_header: 'background: #f8f9fa; padding: 12px; text-align: left; border: 1px solid #e8eaed; font-weight: 600;',
+  table_cell: 'padding: 12px; border: 1px solid #e8eaed;',
+  signature_section: 'margin-top: 32px;',
+  signature_text: 'color: #5f6368; font-size: 13px; line-height: 1.4;',
+  divider: 'border-top: 1px solid #e8eaed; margin-bottom: 16px;'
 };
 
 export default function StyleManager() {
@@ -52,15 +62,16 @@ export default function StyleManager() {
   // Start with default styles so preview is always visible
   const [currentStyles, setCurrentStyles] = useState<EmailStyleJSON>(defaultStyle);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [savedStyleId, setSavedStyleId] = useState<string | null>(null);
   const [hasGeneratedStyles, setHasGeneratedStyles] = useState(false);
+  const [activeStyleId, setActiveStyleId] = useState<string | null>(null);
+  const [isActivating, setIsActivating] = useState(false);
 
-  // Style history tracking
-  const [styleHistory, setStyleHistory] = useState<EmailStyleJSON[]>([defaultStyle]);
+  // Style history tracking (with IDs)
+  const [styleHistory, setStyleHistory] = useState<Array<{ style: EmailStyleJSON; id?: string }>>([{ style: defaultStyle }]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [, setIsLoadingSaved] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState('');
 
   const handleGenerateStyles = async () => {
@@ -72,15 +83,28 @@ export default function StyleManager() {
     try {
       const styles = await generateEmailStylesFromPrompt(prompt);
 
-      // Add new style to history
+      // Automatically save to database first
+      const result = await saveEmailStyle(styles, prompt);
+      let styleId: string | undefined;
+
+      if (result.error) {
+        console.error('Failed to auto-save style:', result.error);
+      } else if (result.id) {
+        styleId = result.id;
+        setSavedStyleId(result.id);
+        setSaveSuccess(true);
+        // Reset success message after 3 seconds
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+
+      // Add new style to history with its ID
       const newHistory = styleHistory.slice(0, historyIndex + 1);
-      newHistory.push(styles);
+      newHistory.push({ style: styles, id: styleId });
       setStyleHistory(newHistory);
       setHistoryIndex(newHistory.length - 1);
 
       setCurrentStyles(styles);
       setHasGeneratedStyles(true);
-      setSavedStyleId(null); // Reset saved ID when generating new styles
     } catch (error) {
       console.error('Error generating styles:', error);
       alert('Failed to generate styles. Please try again.');
@@ -89,27 +113,21 @@ export default function StyleManager() {
     }
   };
 
-  const handleSaveStyles = async () => {
-    if (!currentStyles) return;
 
-    setIsSaving(true);
-    setSaveSuccess(false);
+  const handleActivateStyle = async (styleId: string) => {
+    setIsActivating(true);
     try {
-      const result = await saveEmailStyle(currentStyles, currentPrompt);
-
-      if (result.error) {
-        alert(`Failed to save styles: ${result.error}`);
+      const success = await activateStyle(styleId);
+      if (success) {
+        setActiveStyleId(styleId);
       } else {
-        setSavedStyleId(result.id);
-        setSaveSuccess(true);
-        // Reset success message after 3 seconds
-        setTimeout(() => setSaveSuccess(false), 3000);
+        alert('Failed to activate style. Please try again.');
       }
     } catch (error) {
-      console.error('Error saving styles:', error);
-      alert('Failed to save styles. Please try again.');
+      console.error('Error activating style:', error);
+      alert('Failed to activate style. Please try again.');
     } finally {
-      setIsSaving(false);
+      setIsActivating(false);
     }
   };
 
@@ -117,55 +135,105 @@ export default function StyleManager() {
     const newIndex = direction === 'back' ? historyIndex - 1 : historyIndex + 1;
     if (newIndex >= 0 && newIndex < styleHistory.length) {
       setHistoryIndex(newIndex);
-      setCurrentStyles(styleHistory[newIndex]);
+      const historyItem = styleHistory[newIndex];
+      setCurrentStyles(historyItem.style);
       setSaveSuccess(false);
-      setSavedStyleId(null);
+      setSavedStyleId(historyItem.id || null);
       // Only show hasGeneratedStyles if not on default style
       setHasGeneratedStyles(newIndex > 0);
     }
   };
 
-  const loadSavedStyles = async () => {
+  // Migration function to convert old style format to new format
+  const migrateOldStyle = (oldStyle: unknown): EmailStyleJSON => {
+    const style = oldStyle as Record<string, string> | null;
+
+    // If it already has the new format, return it merged with defaults
+    if (style && 'email_body' in style) {
+      return { ...defaultStyle, ...style } as EmailStyleJSON;
+    }
+
+    // Convert old format to new format
+    return {
+      email_body: style?.email_body || style?.email_container || defaultStyle.email_body,
+      background_color: style?.background_color || defaultStyle.background_color,
+      header_section: style?.header_section || defaultStyle.header_section,
+      header_title: style?.header_title || style?.subject || defaultStyle.header_title,
+      header_subtitle: style?.header_subtitle || defaultStyle.header_subtitle,
+      text_section: style?.text_section || defaultStyle.text_section,
+      paragraph: style?.paragraph || defaultStyle.paragraph,
+      bold_text: style?.bold_text || defaultStyle.bold_text,
+      italic_text: style?.italic_text || defaultStyle.italic_text,
+      links_section: style?.links_section || defaultStyle.links_section,
+      link: style?.link || defaultStyle.link,
+      link_button: style?.link_button || style?.button || defaultStyle.link_button,
+      list_section: style?.list_section || defaultStyle.list_section,
+      unordered_list: style?.unordered_list || style?.list || defaultStyle.unordered_list,
+      ordered_list: style?.ordered_list || defaultStyle.ordered_list,
+      list_item: style?.list_item || defaultStyle.list_item,
+      table_section: style?.table_section || defaultStyle.table_section,
+      table: style?.table || defaultStyle.table,
+      table_header: style?.table_header || defaultStyle.table_header,
+      table_cell: style?.table_cell || defaultStyle.table_cell,
+      signature_section: style?.signature_section || style?.signature_block || defaultStyle.signature_section,
+      signature_text: style?.signature_text || style?.signature_name || defaultStyle.signature_text,
+      divider: style?.divider || style?.footer || defaultStyle.divider
+    };
+  };
+
+  const loadSavedStyles = useCallback(async () => {
     setIsLoadingSaved(true);
     try {
       const savedStyles = await getSavedStyles();
       if (savedStyles && savedStyles.length > 0) {
-        // Convert saved styles to EmailStyleJSON format, filtering out invalid ones
-        const loadedStyles = savedStyles
+        // Convert saved styles using migration function and keep IDs
+        const loadedStylesWithIds = savedStyles
           .map(item => {
-            const style = item.styling_json as any; // Changed from style_json to styling_json
-            // Check if the style has all required properties
-            if (style && style.email_container) {
-              // If it's missing some properties, merge with defaults
-              return { ...defaultStyle, ...style } as EmailStyleJSON;
+            try {
+              return {
+                style: migrateOldStyle(item.styling_json),
+                id: item.id
+              };
+            } catch (e) {
+              console.error('Error migrating style:', e);
+              return null;
             }
-            return null;
           })
-          .filter(style => style !== null) as EmailStyleJSON[];
+          .filter(item => item !== null) as Array<{ style: EmailStyleJSON; id: string }>;
 
-        if (loadedStyles.length === 0) {
+        if (loadedStylesWithIds.length === 0) {
           console.log('No valid saved styles found');
           return;
         }
 
         // Add loaded styles to history (keeping default as first)
-        const newHistory = [defaultStyle, ...loadedStyles];
+        const newHistory: Array<{ style: EmailStyleJSON; id?: string }> = [
+          { style: defaultStyle },
+          ...loadedStylesWithIds
+        ];
         setStyleHistory(newHistory);
 
         // Stay on default style initially
-        console.log(`Loaded ${loadedStyles.length} saved styles`);
+        console.log(`Loaded and migrated ${loadedStylesWithIds.length} saved styles`);
       }
     } catch (error) {
       console.error('Error loading saved styles:', error);
     } finally {
       setIsLoadingSaved(false);
     }
-  };
+  }, []);
 
-  // Load saved styles on component mount
+  // Load saved styles and active style on component mount
   useEffect(() => {
     loadSavedStyles();
-  }, []);
+
+    // Load the active style ID
+    getActiveStyle().then(activeStyle => {
+      if (activeStyle) {
+        setActiveStyleId(activeStyle.id!);
+      }
+    });
+  }, [loadSavedStyles]);
 
   const examplePrompts = [
     "Cyberpunk theme with neon colors and tech vibes",
@@ -176,15 +244,15 @@ export default function StyleManager() {
   ];
 
   return (
-    <div className="h-screen flex flex-col lg:flex-row">
+    <div className="h-screen flex flex-col lg:flex-row" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif" }}>
       {/* Left Panel - Controls */}
-      <div className="lg:w-1/2 p-6 bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 overflow-y-auto">
+      <div className="lg:w-1/2 p-6 bg-gray-50 overflow-y-auto">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-cyan-600 bg-clip-text text-transparent mb-2">
-            Email Style Generator
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            BetterMail
           </h1>
           <p className="text-gray-600 mb-6">
-            Describe your ideal email style and watch it come to life
+            Describe your ideal email style and watch it come to life.
           </p>
 
           {/* Prompt Input */}
@@ -197,8 +265,8 @@ export default function StyleManager() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Describe the style you want..."
-              className="w-full min-h-[120px] p-4 rounded-xl border-2 border-purple-200
-                       focus:border-purple-400 focus:ring-4 focus:ring-purple-100
+              className="w-full min-h-[120px] p-4 rounded-lg border-2 border-gray-300
+                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
                        transition-all duration-200 resize-none"
               disabled={isGenerating}
             />
@@ -212,8 +280,8 @@ export default function StyleManager() {
                 <button
                   key={idx}
                   onClick={() => setPrompt(example)}
-                  className="px-3 py-1.5 text-xs rounded-full bg-white border border-purple-200
-                           hover:border-purple-400 hover:bg-purple-50
+                  className="px-3 py-1.5 text-xs rounded-md bg-white border border-gray-300
+                           hover:border-gray-400 hover:bg-gray-50
                            transition-all duration-200"
                   disabled={isGenerating}
                 >
@@ -228,12 +296,10 @@ export default function StyleManager() {
             <button
               onClick={handleGenerateStyles}
               disabled={!prompt.trim() || isGenerating}
-              className="w-full py-3 px-6 rounded-xl font-semibold text-white
-                       bg-gradient-to-r from-purple-500 to-cyan-500
-                       hover:from-purple-600 hover:to-cyan-600
+              className="w-full py-3 px-6 rounded-lg font-medium text-white
+                       bg-indigo-600 hover:bg-indigo-700
                        disabled:opacity-50 disabled:cursor-not-allowed
-                       shadow-lg hover:shadow-xl
-                       transform hover:scale-[1.02] active:scale-[0.98]
+                       shadow-sm hover:shadow-md
                        transition-all duration-200"
             >
               {isGenerating ? (
@@ -257,16 +323,16 @@ export default function StyleManager() {
                   Generating...
                 </span>
               ) : (
-                '✨ Generate Styles'
+                'Generate Styles'
               )}
             </button>
           </div>
 
-          {/* Status Info */}
-          {savedStyleId && (
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <p className="text-sm text-gray-600">
-                Style saved with ID: <code className="bg-gray-100 px-2 py-1 rounded">{savedStyleId}</code>
+          {/* Auto-save Status */}
+          {saveSuccess && (
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-3">
+              <p className="text-sm text-green-800">
+                ✓ Style saved to database automatically!
               </p>
             </div>
           )}
@@ -277,14 +343,15 @@ export default function StyleManager() {
       <div className="lg:w-1/2 bg-gray-100">
         <DynamicEmailPreview
           styles={currentStyles}
-          onSave={handleSaveStyles}
-          isSaving={isSaving}
-          saveSuccess={saveSuccess}
           hasGeneratedStyles={hasGeneratedStyles}
           onNavigateHistory={handleNavigateHistory}
           canGoBack={historyIndex > 0}
           canGoForward={historyIndex < styleHistory.length - 1}
           historyPosition={`${historyIndex + 1} / ${styleHistory.length}`}
+          activeStyleId={activeStyleId}
+          currentStyleId={styleHistory[historyIndex]?.id || null}
+          onActivateStyle={handleActivateStyle}
+          isActivating={isActivating}
         />
       </div>
     </div>
