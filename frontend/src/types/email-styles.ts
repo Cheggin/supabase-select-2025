@@ -1,45 +1,51 @@
 // This structure matches what will be stored in the database
 // Each value is a CSS style string that can be applied directly to HTML elements
 export interface EmailStyleJSON {
-  // Container styles
-  email_container: string;
+  // Container and background
+  email_body: string;
+  background_color: string;
 
   // Header section
-  sender_section: string;
-  sender_avatar: string;
-  sender_name: string;
-  sender_email: string;
-  timestamp: string;
+  header_section: string;
+  header_title: string;
+  header_subtitle: string;
 
-  // Content styles
-  subject: string;
+  // Text section
+  text_section: string;
   paragraph: string;
-  quote_block: string;
+  bold_text: string;
+  italic_text: string;
 
-  // Table styles
+  // Links section
+  links_section: string;
+  link: string;
+  link_button: string;
+
+  // List section
+  list_section: string;
+  unordered_list: string;
+  ordered_list: string;
+  list_item: string;
+
+  // Table section (for data)
+  table_section: string;
   table: string;
   table_header: string;
   table_cell: string;
 
-  // List styles
-  list: string;
-  list_item: string;
-
-  // Interactive elements
-  button: string;
-  link: string;
-
-  // Media
-  image: string;
-
-  // Footer
-  footer: string;
+  // Footer/Signature
+  signature_section: string;
+  signature_text: string;
+  divider: string;
 }
 
 // This is what we store in the database
 export interface EmailStyleRecord {
   id: string;
-  style_json: EmailStyleJSON;
+  user_prompt: string;
+  styling_json: EmailStyleJSON;
+  active: boolean;
+  created_at: string;
 }
 
 // For backward compatibility with current components

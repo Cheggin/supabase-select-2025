@@ -1,28 +1,32 @@
 // Define type directly to avoid import issues
 interface EmailStyleJSON {
-  email_container: string;
-  sender_section: string;
-  sender_avatar: string;
-  sender_name: string;
-  sender_email: string;
-  timestamp: string;
-  subject: string;
+  email_body: string;
+  background_color: string;
+  header_section: string;
+  header_title: string;
+  header_subtitle: string;
+  text_section: string;
   paragraph: string;
-  quote_block: string;
+  bold_text: string;
+  italic_text: string;
+  links_section: string;
+  link: string;
+  link_button: string;
+  list_section: string;
+  unordered_list: string;
+  ordered_list: string;
+  list_item: string;
+  table_section: string;
   table: string;
   table_header: string;
   table_cell: string;
-  list: string;
-  list_item: string;
-  button: string;
-  link: string;
-  image: string;
-  footer: string;
+  signature_section: string;
+  signature_text: string;
+  divider: string;
 }
 
 // This service handles the LLM integration for generating email styles
 export class LLMStyleGenerator {
-  private apiKey: string;
   private apiUrl: string;
 
   constructor() {
@@ -75,18 +79,21 @@ export class LLMStyleGenerator {
   }
 
   // Validate that the returned JSON has all required fields
-  private validateAndSanitizeStyles(styles: any): EmailStyleJSON {
+  private validateAndSanitizeStyles(styles: unknown): EmailStyleJSON {
     const requiredFields: (keyof EmailStyleJSON)[] = [
-      'email_container', 'sender_section', 'sender_avatar', 'sender_name',
-      'sender_email', 'timestamp', 'subject', 'paragraph', 'quote_block',
-      'table', 'table_header', 'table_cell', 'list', 'list_item',
-      'button', 'link', 'image', 'footer'
+      'email_body', 'background_color', 'header_section', 'header_title',
+      'header_subtitle', 'text_section', 'paragraph', 'bold_text',
+      'italic_text', 'links_section', 'link', 'link_button',
+      'list_section', 'unordered_list', 'ordered_list', 'list_item',
+      'table_section', 'table', 'table_header', 'table_cell',
+      'signature_section', 'signature_text', 'divider'
     ];
 
     // Ensure all fields exist
-    const validatedStyles: any = {};
+    const stylesObj = styles as Record<string, string>;
+    const validatedStyles: Record<string, string> = {};
     for (const field of requiredFields) {
-      validatedStyles[field] = styles[field] || this.getDefaultStyleForField(field);
+      validatedStyles[field] = stylesObj[field] || this.getDefaultStyleForField(field);
     }
 
     return validatedStyles as EmailStyleJSON;
@@ -101,24 +108,29 @@ export class LLMStyleGenerator {
   // Fallback styles if LLM fails
   private getFallbackStyles(): EmailStyleJSON {
     return {
-      email_container: 'background-color: #ffffff; padding: 24px; border-radius: 12px;',
-      sender_section: 'display: flex; align-items: center; gap: 16px; margin-bottom: 24px;',
-      sender_avatar: 'width: 48px; height: 48px; border-radius: 50%; background: #6366f1; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600;',
-      sender_name: 'font-size: 16px; font-weight: 600; color: #1a1a1a;',
-      sender_email: 'font-size: 14px; color: #6b7280;',
-      timestamp: 'font-size: 12px; color: #9ca3af;',
-      subject: 'font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 16px;',
-      paragraph: 'font-size: 16px; line-height: 1.6; color: #374151; margin-bottom: 16px;',
-      quote_block: 'border-left: 4px solid #8b5cf6; background-color: #f3f4f6; padding: 16px; margin: 16px 0;',
+      email_body: 'max-width: 600px; margin: 0 auto; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Helvetica", "Arial", sans-serif;',
+      background_color: '#f6f6f6',
+      header_section: 'margin-bottom: 24px;',
+      header_title: 'font-size: 24px; font-weight: bold; color: #1a1a1a; margin-bottom: 8px;',
+      header_subtitle: 'font-size: 16px; color: #6b7280;',
+      text_section: 'margin-bottom: 24px;',
+      paragraph: 'font-size: 14px; line-height: 1.6; color: #374151; margin-bottom: 16px;',
+      bold_text: 'font-weight: bold;',
+      italic_text: 'font-style: italic;',
+      links_section: 'margin-bottom: 24px;',
+      link: 'color: #6366f1; text-decoration: underline;',
+      link_button: 'display: inline-block; padding: 12px 32px; background: #6366f1; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;',
+      list_section: 'margin-bottom: 24px;',
+      unordered_list: 'margin: 16px 0; padding-left: 24px; color: #374151;',
+      ordered_list: 'margin: 16px 0; padding-left: 24px; color: #374151;',
+      list_item: 'margin-bottom: 8px; line-height: 1.6;',
+      table_section: 'margin-bottom: 24px;',
       table: 'width: 100%; border-collapse: collapse; margin: 16px 0;',
       table_header: 'background-color: #f9fafb; color: #111827; padding: 12px; border: 1px solid #e5e7eb; font-weight: 600;',
       table_cell: 'padding: 12px; border: 1px solid #e5e7eb; color: #374151;',
-      list: 'margin: 16px 0; padding-left: 24px; color: #374151;',
-      list_item: 'margin-bottom: 8px; line-height: 1.6;',
-      button: 'display: inline-block; padding: 12px 32px; background: #6366f1; color: white; border-radius: 8px; text-decoration: none; font-weight: 600;',
-      link: 'color: #6366f1; text-decoration: underline;',
-      image: 'max-width: 100%; height: auto; border-radius: 8px; margin: 16px 0;',
-      footer: 'margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af;'
+      signature_section: 'margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb;',
+      signature_text: 'font-size: 14px; color: #6b7280;',
+      divider: 'border-top: 1px solid #e5e7eb; margin: 16px 0;'
     };
   }
 }
@@ -143,7 +155,7 @@ export async function saveStylesToSupabase(styles: EmailStyleJSON): Promise<stri
       'Authorization': `Bearer ${supabaseKey}`
     },
     body: JSON.stringify({
-      style_json: styles
+      styling_json: styles
     })
   });
 

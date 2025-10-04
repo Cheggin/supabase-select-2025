@@ -89,10 +89,8 @@ def generate_style_config_from_prompt(user_prompt: str) -> dict:
     """
     Use Claude to convert user's natural language into structured style JSON
     """
-    
-    system_prompt = """You are an email styling configuration generator.
 
-Convert the user's styling preferences into a JSON configuration for HTML emails.
+    system_prompt = """You are an email CSS style generator for a Gmail-compatible template system.
 
 The JSON should include styling for these elements (only include ones relevant to the user's request):
 - container: max_width, padding, background_color, font_family
@@ -106,18 +104,50 @@ The JSON should include styling for these elements (only include ones relevant t
 - image: max_width, margin
 - footer: font_size, color, text_align
 
-RULES:
-1. Return ONLY valid JSON, no explanations
-2. Use hex colors (e.g., #333333)
-3. Include units for sizes (px, %, em)
-4. Only use CSS properties that work in emails
-5. Be comprehensive but reasonable
+You MUST return a JSON object with these EXACT keys, where each value is a complete CSS string:
 
-Return the style configuration JSON:"""
+{
+  "email_body": "font-family: Arial, sans-serif; color: #202124; font-size: 14px;",
+  "background_color": "#ffffff",
+  "header_section": "margin-bottom: 24px;",
+  "header_title": "font-size: 28px; font-weight: 600; color: [color]; margin: 0 0 8px 0;",
+  "header_subtitle": "font-size: 16px; color: [color]; margin: 0;",
+  "text_section": "margin-bottom: 24px;",
+  "paragraph": "font-size: 14px; line-height: 1.6; color: [color]; margin: 12px 0;",
+  "bold_text": "font-weight: 600;",
+  "italic_text": "font-style: italic;",
+  "links_section": "margin-bottom: 24px;",
+  "link": "color: [color]; text-decoration: none; margin-right: 16px;",
+  "link_button": "display: inline-block; padding: 10px 20px; background: [color]; color: white; text-decoration: none; border-radius: 4px; margin-right: 8px;",
+  "list_section": "margin-bottom: 24px;",
+  "unordered_list": "margin: 12px 0; padding-left: 20px;",
+  "ordered_list": "margin: 12px 0; padding-left: 20px;",
+  "list_item": "margin: 6px 0; line-height: 1.5;",
+  "table_section": "margin-bottom: 24px;",
+  "table": "width: 100%; border-collapse: collapse;",
+  "table_header": "background: #f8f9fa; padding: 12px; text-align: left; border: 1px solid #e8eaed; font-weight: 600;",
+  "table_cell": "padding: 12px; border: 1px solid #e8eaed;",
+  "signature_section": "margin-top: 32px;",
+  "signature_text": "color: #5f6368; font-size: 13px; line-height: 1.4;",
+  "divider": "border-top: 1px solid #e8eaed; margin-bottom: 16px;"
+}
+
+IMPORTANT RULES:
+1. Return ONLY valid JSON, no markdown backticks, no explanations
+2. background_color must be ONLY a hex color (e.g., "#f0f0f0"), not a CSS string
+3. Every other value MUST be a complete CSS string with semicolons
+4. Use hex colors (e.g., #333333) for all color values
+5. For dark themes: use dark background_color (#1a1a1a, #000000) with light text colors
+6. For cyberpunk: neon colors (#00ffff, #ff00ff) with black background
+7. For minimal: white background (#ffffff) with gray text (#5f6368)
+8. For warm: cream background (#faf9f6) with brown text (#3d2e2e)
+9. For corporate: white background with navy/blue accents (#003366, #1a73e8)
+
+Return ONLY the JSON object:"""
 
     message = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
+        model="claude-sonnet-4-5-20250929",
+        max_tokens= 64000,
         messages=[
             {
                 "role": "user",
