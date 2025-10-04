@@ -330,9 +330,20 @@ export default function DynamicEmailPreview({
                 <div class="dev-section" style="${styles.links_section}">
                   <span class="dev-label">button_section</span>
                   <div style="margin: 20px 0; text-align: center;">
+                    <style>
+                      @media (max-width: 480px) {
+                        .email-button {
+                          display: block !important;
+                          margin: 10px auto !important;
+                          max-width: 280px !important;
+                        }
+                      }
+                    </style>
                     ${emailContent.body.links
                       .filter(link => link.isButton)
-                      .map(link => `<a href="${link.url}" style="${styles.link_button}; margin: 0 8px;">${link.text}</a>`)
+                      .map((link, index) => `
+                        <a href="${link.url}" class="email-button" style="${styles.link_button}; margin: 8px; display: inline-block;">${link.text}</a>
+                      `)
                       .join('')}
                   </div>
                 </div>
