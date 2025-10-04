@@ -220,7 +220,7 @@ async def process_and_send_email(email_id: str):
             email_data = response.json()
         
         print(f"Fetched email from: {email_data.get('from')}")
-        
+        print(f"This is who we send to: {os.getenv('FORWARD_TO_EMAIL')}")
         # Get the active style
         result = supabase.table("email_styles")\
             .select("styling_json")\
@@ -262,7 +262,7 @@ async def process_and_send_email(email_id: str):
                 },
                 json={
                     "from": os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
-                    "to": [email_data.get("from")],
+                    "to": [os.getenv("FORWARD_TO_EMAIL")],
                     "subject": f"Re: {email_data.get('subject')}",
                     "html": styled_html,
                 }
