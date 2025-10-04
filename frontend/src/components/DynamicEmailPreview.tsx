@@ -312,16 +312,28 @@ export default function DynamicEmailPreview({
                 ` : ''}
               </div>
 
-              <!-- Links Section -->
-              ${emailContent.body.links && emailContent.body.links.length > 0 ? `
+              <!-- Links Section (text links only) -->
+              ${emailContent.body.links && emailContent.body.links.filter(l => !l.isButton).length > 0 ? `
                 <div class="dev-section" style="${styles.links_section}">
                   <span class="dev-label">links_section</span>
                   <div style="margin: 16px 0;">
-                    ${emailContent.body.links.map(link =>
-                      link.isButton
-                        ? `<a href="${link.url}" style="${styles.link_button}">${link.text}</a> `
-                        : `<a href="${link.url}" style="${styles.link}">${link.text}</a> `
-                    ).join('')}
+                    ${emailContent.body.links
+                      .filter(link => !link.isButton)
+                      .map((link, index) => `${index > 0 ? ' ' : ''}<a href="${link.url}" style="${styles.link}">${link.text}</a>`)
+                      .join('')}
+                  </div>
+                </div>
+              ` : ''}
+
+              <!-- Buttons Section (CTA buttons) -->
+              ${emailContent.body.links && emailContent.body.links.filter(l => l.isButton).length > 0 ? `
+                <div class="dev-section" style="${styles.links_section}">
+                  <span class="dev-label">button_section</span>
+                  <div style="margin: 20px 0; text-align: center;">
+                    ${emailContent.body.links
+                      .filter(link => link.isButton)
+                      .map(link => `<a href="${link.url}" style="${styles.link_button}; margin: 0 8px;">${link.text}</a>`)
+                      .join('')}
                   </div>
                 </div>
               ` : ''}
