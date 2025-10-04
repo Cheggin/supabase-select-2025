@@ -2,7 +2,6 @@
 # pip install fastapi uvicorn supabase anthropic resend python-dotenv
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -11,19 +10,11 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from anthropic import Anthropic
 from resend import Resend
+import httpx
 
 load_dotenv()
 
 app = FastAPI()
-
-# Configure CORS to allow frontend to call backend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Initialize clients
 supabase: Client = create_client(
@@ -97,50 +88,35 @@ async def create_style(request: CreateStyleRequest):
 def generate_style_config_from_prompt(user_prompt: str) -> dict:
     """
     Use Claude to convert user's natural language into structured style JSON
-    that matches the frontend's exact requirements
     """
+    
+    system_prompt = """You are an email styling configuration generator.
 
-    system_prompt = """You are an email CSS style generator for a template preview system.
+Convert the user's styling preferences into a JSON configuration for HTML emails.
 
-Convert the user's styling preferences into a JSON configuration with complete inline CSS strings for each email element.
+The JSON should include styling for these elements (only include ones relevant to the user's request):
+- container: max_width, padding, background_color, font_family
+- headings: h1, h2, h3 with font_size, color, font_weight, margin
+- paragraph: font_size, color, line_height, margin
+- links: color, text_decoration, font_weight
+- table: border, width, border_collapse
+- table_header: background_color, padding, font_weight, color
+- table_cell: padding, border, color
+- button: background_color, color, padding, border_radius, font_size
+- image: max_width, margin
+- footer: font_size, color, text_align
 
-You MUST return a JSON object with these EXACT keys, where each value is a complete CSS string that can be applied as inline styles:
+RULES:
+1. Return ONLY valid JSON, no explanations
+2. Use hex colors (e.g., #333333)
+3. Include units for sizes (px, %, em)
+4. Only use CSS properties that work in emails
+5. Be comprehensive but reasonable
 
-{
-  "email_container": "complete CSS string for main container (background, padding, border-radius, etc)",
-  "sender_section": "display: flex; align-items: center; gap: 16px; margin-bottom: 24px;",
-  "sender_avatar": "width: 48px; height: 48px; border-radius: 50%; background: [color/gradient]; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600;",
-  "sender_name": "font-size: 16px; font-weight: 600; color: [color];",
-  "sender_email": "font-size: 14px; color: [color]; opacity: 0.8;",
-  "timestamp": "font-size: 12px; color: [color]; opacity: 0.6;",
-  "subject": "font-size: 24px; font-weight: 700; color: [color]; margin-bottom: 16px;",
-  "paragraph": "font-size: 16px; line-height: 1.6; color: [color]; margin-bottom: 16px;",
-  "quote_block": "border-left: 4px solid [color]; background-color: [color]; padding: 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-style: italic; color: [color];",
-  "table": "width: 100%; border-collapse: collapse; margin: 16px 0;",
-  "table_header": "background-color: [color]; color: [color]; padding: 12px; text-align: left; border: 1px solid [color]; font-weight: 600;",
-  "table_cell": "padding: 12px; border: 1px solid [color]; color: [color];",
-  "list": "margin: 16px 0; padding-left: 24px; color: [color];",
-  "list_item": "margin-bottom: 8px; line-height: 1.6;",
-  "button": "display: inline-block; padding: 12px 32px; background: [color/gradient]; color: [color]; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;",
-  "link": "color: [color]; text-decoration: underline;",
-  "image": "max-width: 100%; height: auto; border-radius: 8px; margin: 16px 0;",
-  "footer": "margin-top: 32px; padding-top: 16px; border-top: 1px solid [color]; text-align: center; font-size: 12px; color: [color];"
-}
-
-IMPORTANT RULES:
-1. Return ONLY valid JSON, no markdown backticks, no explanations
-2. Every value MUST be a complete CSS string with semicolons between properties
-3. Use hex colors (e.g., #333333) or CSS gradients
-4. Be creative and match the user's style request
-5. For cyberpunk: use neon colors (#00ffff, #ff00ff), dark backgrounds
-6. For minimal: use clean colors, lots of white space
-7. For warm: use coral, peach, cream colors
-8. For corporate: use navy, gold, professional colors
-
-Return ONLY the JSON object:"""
+Return the style configuration JSON:"""
 
     message = anthropic_client.messages.create(
-        model="claude-3-5-haiku-20241022",  # Using latest Haiku model
+        model="claude-sonnet-4-20250514",
         max_tokens=4096,
         messages=[
             {
@@ -149,7 +125,7 @@ Return ONLY the JSON object:"""
             }
         ]
     )
-
+    
     # Clean response
     response_text = message.content[0].text.strip()
     if response_text.startswith('```'):
@@ -157,7 +133,7 @@ Return ONLY the JSON object:"""
         if response_text.startswith('json'):
             response_text = response_text[4:]
         response_text = response_text.strip()
-
+    
     return json.loads(response_text)
 
 
@@ -170,11 +146,18 @@ async def handle_inbound_email(event: WebhookEvent, background_tasks: Background
     Note: Webhook doesn't contain full email - we fetch it via API
     """
     try:
+        print(f"DEBUG: Full webhook payload: {event.dict()}")  # Debug line
+        
         if event.type != "email.received":
             return {"message": "Event type not supported"}
         
-        email_id = event.data.get("id")
+        # Try different possible structures
+        email_id = event.data.get("id") or event.data.get("email_id") or event.data.get("inbound_id")
         print(f"Received email.received event for ID: {email_id}")
+        
+        if not email_id:
+            print(f"ERROR: Could not find email ID in payload: {event.data}")
+            return {"message": "No email ID found"}
         
         # Process email in background
         background_tasks.add_task(process_and_send_email, email_id)
@@ -188,14 +171,24 @@ async def handle_inbound_email(event: WebhookEvent, background_tasks: Background
 
 async def process_and_send_email(email_id: str):
     """
-    1. Fetch full email from Resend Inbound API
+    1. Fetch full email from Resend Inbound API (using direct HTTP)
     2. Get active style_config from Supabase
     3. Use LLM to apply styling to email
     4. Send styled email via Resend
     """
     try:
-        # Fetch full email content from Resend Inbound API
-        email_data = resend_client.inbound.get(email_id)
+        # Fetch full email content from Resend Inbound API using HTTP
+        headers = {
+            "Authorization": f"Bearer {os.getenv('RESEND_API_KEY')}"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://api.resend.com/emails/inbound/{email_id}",
+                headers=headers
+            )
+            email_data = response.json()
+        
         print(f"Fetched email from: {email_data.get('from')}")
         
         # Get the active style
@@ -210,25 +203,48 @@ async def process_and_send_email(email_id: str):
             styled_html = email_data.get("html") or email_data.get("text")
         else:
             style_config = result.data["styling_json"]
-            print(f"Applying active style config...")
-            
+            print(f"\n{'='*60}")
+            print(f"APPLYING STYLING TO EMAIL")
+            print(f"{'='*60}")
+            print(f"\nStyle Config JSON:")
+            print(json.dumps(style_config, indent=2))
+            print(f"\n{'='*60}\n")
+
             # Use LLM to apply styling
             original_content = email_data.get("html") or email_data.get("text")
+            print(f"Original Email Content:")
+            print(f"{original_content[:500]}..." if len(original_content) > 500 else original_content)
+            print(f"\n{'='*60}\n")
+
             styled_html = apply_styling_with_llm(original_content, style_config)
+
+            print(f"Styled Email Output:")
+            print(f"{styled_html[:500]}..." if len(styled_html) > 500 else styled_html)
+            print(f"\n{'='*60}\n")
         
-        # Send styled email via Resend
-        send_result = resend_client.emails.send({
-            "from": os.getenv("RESEND_FROM_EMAIL", "noreply@yourdomain.com"),
-            "to": email_data.get("from"),  # Send back to original sender
-            "subject": f"Re: {email_data.get('subject')}",
-            "html": styled_html,
-        })
+        # Send styled email via Resend using direct HTTP
+        async with httpx.AsyncClient() as client:
+            send_response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('RESEND_API_KEY')}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
+                    "to": [email_data.get("from")],
+                    "subject": f"Re: {email_data.get('subject')}",
+                    "html": styled_html,
+                }
+            )
+            send_result = send_response.json()
         
-        print(f"✅ Styled email sent successfully! ID: {send_result['id']}")
+        print(f"✅ Styled email sent successfully! ID: {send_result.get('id')}")
         
     except Exception as e:
         print(f"❌ Error processing email: {e}")
-
+        import traceback
+        print(traceback.format_exc())
 
 def apply_styling_with_llm(original_html: str, style_config: dict) -> str:
     """
@@ -249,6 +265,8 @@ IMPORTANT RULES:
 5. Make sure tables, buttons, and images are email-client compatible
 6. Return ONLY the styled HTML, no explanations
 7. Keep the HTML valid and well-formed
+8. DONT CHANGE THE STRUCTURE OF THE EMAIL. The structure being where stuff is places, how big things are, etc. Think of it as a skin. You are changing the skin of the email, not the structure. The styling rules are the skin, a suggestion of how to change the skin.
+9. You will have some main tasks. You will first generate the draft email with the better html, then you will look at the html you generated to see if it looks OBJECTIVELY good; if it does, you will return it. If it doesn't, you will fix it and then return the fixed version.
 
 Original email HTML:
 {original_html}
@@ -256,8 +274,8 @@ Original email HTML:
 Return the styled HTML:"""
 
     message = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4096,
+        model="claude-sonnet-4-5-20250929",
+        max_tokens=64000,
         messages=[
             {
                 "role": "user",
