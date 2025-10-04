@@ -490,7 +490,11 @@ export default function DynamicEmailPreview({
                 type="checkbox"
                 checked={currentStyleId ? activeStyleId === currentStyleId : false}
                 onChange={() => {
-                  if (currentStyleId && onActivateStyle && activeStyleId !== currentStyleId) {
+                  console.log('Active toggle clicked');
+                  console.log('currentStyleId:', currentStyleId);
+                  console.log('onActivateStyle exists:', !!onActivateStyle);
+                  if (currentStyleId && onActivateStyle) {
+                    console.log('Calling onActivateStyle with:', currentStyleId);
                     onActivateStyle(currentStyleId);
                   }
                 }}
