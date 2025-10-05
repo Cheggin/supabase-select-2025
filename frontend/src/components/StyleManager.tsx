@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { saveEmailStyle, getSavedStyles, activateStyle, getActiveStyle } from '../services/supabase';
 import { generateEmailStylesFromPrompt } from '../services/llmStyleGenerator';
 import DynamicEmailPreview from './DynamicEmailPreview';
@@ -58,12 +60,12 @@ const defaultStyle: EmailStyleJSON = {
 };
 
 export default function StyleManager() {
+  const navigate = useNavigate();
   const [prompt, setPrompt] = useState('');
-  // Start with default styles so preview is always visible
   const [currentStyles, setCurrentStyles] = useState<EmailStyleJSON>(defaultStyle);
   const [isGenerating, setIsGenerating] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [savedStyleId, setSavedStyleId] = useState<string | null>(null);
+  const [, setSavedStyleId] = useState<string | null>(null);
   const [hasGeneratedStyles, setHasGeneratedStyles] = useState(false);
   const [activeStyleId, setActiveStyleId] = useState<string | null>(null);
   const [isActivating, setIsActivating] = useState(false);
@@ -71,84 +73,10 @@ export default function StyleManager() {
   // Style history tracking (with IDs)
   const [styleHistory, setStyleHistory] = useState<Array<{ style: EmailStyleJSON; id?: string }>>([{ style: defaultStyle }]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const [, setIsLoadingSaved] = useState(false);
-  const [currentPrompt, setCurrentPrompt] = useState('');
 
-  const handleGenerateStyles = async () => {
-    if (!prompt.trim()) return;
-
-    setIsGenerating(true);
-    setSaveSuccess(false);
-    setCurrentPrompt(prompt); // Store prompt for saving
-    try {
-      const styles = await generateEmailStylesFromPrompt(prompt);
-
-      // Automatically save to database first
-      const result = await saveEmailStyle(styles, prompt);
-      let styleId: string | undefined;
-
-      if (result.error) {
-        console.error('Failed to auto-save style:', result.error);
-      } else if (result.id) {
-        styleId = result.id;
-        setSavedStyleId(result.id);
-        setSaveSuccess(true);
-        // Reset success message after 3 seconds
-        setTimeout(() => setSaveSuccess(false), 3000);
-      }
-
-      // Add new style to history with its ID
-      const newHistory = styleHistory.slice(0, historyIndex + 1);
-      newHistory.push({ style: styles, id: styleId });
-      setStyleHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
-
-      setCurrentStyles(styles);
-      setHasGeneratedStyles(true);
-    } catch (error) {
-      console.error('Error generating styles:', error);
-      alert('Failed to generate styles. Please try again.');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-
-  const handleActivateStyle = async (styleId: string) => {
-    console.log('handleActivateStyle called with styleId:', styleId);
-    console.log('Current activeStyleId:', activeStyleId);
-
-    setIsActivating(true);
-    try {
-      const success = await activateStyle(styleId);
-      console.log('activateStyle result:', success);
-
-      if (success) {
-        setActiveStyleId(styleId);
-        console.log('Style activated successfully');
-      } else {
-        alert('Failed to activate style. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error activating style:', error);
-      alert('Failed to activate style. Please try again.');
-    } finally {
-      setIsActivating(false);
-    }
-  };
-
-  const handleNavigateHistory = (direction: 'back' | 'forward') => {
-    const newIndex = direction === 'back' ? historyIndex - 1 : historyIndex + 1;
-    if (newIndex >= 0 && newIndex < styleHistory.length) {
-      setHistoryIndex(newIndex);
-      const historyItem = styleHistory[newIndex];
-      setCurrentStyles(historyItem.style);
-      setSaveSuccess(false);
-      setSavedStyleId(historyItem.id || null);
-      // Only show hasGeneratedStyles if not on default style
-      setHasGeneratedStyles(newIndex > 0);
-    }
-  };
+  // Refs to prevent duplicate operations
+  const hasLoadedRef = useRef(false);
+  const generationInProgressRef = useRef(false);
 
   // Migration function to convert old style format to new format
   const migrateOldStyle = (oldStyle: unknown): EmailStyleJSON => {
@@ -187,59 +115,141 @@ export default function StyleManager() {
     };
   };
 
-  const loadSavedStyles = useCallback(async () => {
-    setIsLoadingSaved(true);
+  const handleGenerateStyles = async () => {
+    if (!prompt.trim()) return;
+
+    // Prevent double execution from React StrictMode
+    if (generationInProgressRef.current) {
+      console.log('Generation already in progress, skipping');
+      return;
+    }
+
+    generationInProgressRef.current = true;
+    setIsGenerating(true);
+    setSaveSuccess(false);
+
     try {
-      const savedStyles = await getSavedStyles();
-      if (savedStyles && savedStyles.length > 0) {
-        // Convert saved styles using migration function and keep IDs
-        const loadedStylesWithIds = savedStyles
-          .map(item => {
-            try {
-              return {
-                style: migrateOldStyle(item.styling_json),
-                id: item.id
-              };
-            } catch (e) {
-              console.error('Error migrating style:', e);
-              return null;
-            }
-          })
-          .filter(item => item !== null) as Array<{ style: EmailStyleJSON; id: string }>;
+      const styles = await generateEmailStylesFromPrompt(prompt);
 
-        if (loadedStylesWithIds.length === 0) {
-          console.log('No valid saved styles found');
-          return;
-        }
+      // Save to database
+      const result = await saveEmailStyle(styles, prompt);
 
-        // Add loaded styles to history (keeping default as first)
-        const newHistory: Array<{ style: EmailStyleJSON; id?: string }> = [
-          { style: defaultStyle },
-          ...loadedStylesWithIds
-        ];
+      if (result.error) {
+        console.error('Failed to save style:', result.error);
+      } else if (result.id) {
+        console.log('Style saved with ID:', result.id);
+        setSavedStyleId(result.id);
+        setSaveSuccess(true);
+
+        // Simply add the new style to the end of history - no reloading
+        const newHistoryItem = { style: styles, id: result.id };
+        const newHistory = [...styleHistory, newHistoryItem];
+
         setStyleHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
 
-        // Stay on default style initially
-        console.log(`Loaded and migrated ${loadedStylesWithIds.length} saved styles`);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+
+      setCurrentStyles(styles);
+      setHasGeneratedStyles(true);
+
+    } catch (error) {
+      console.error('Error generating styles:', error);
+      alert('Failed to generate styles. Please try again.');
+    } finally {
+      setIsGenerating(false);
+      // Reset the lock after a short delay
+      setTimeout(() => {
+        generationInProgressRef.current = false;
+      }, 500);
+    }
+  };
+
+  const handleActivateStyle = async (styleId: string) => {
+    setIsActivating(true);
+    try {
+      const success = await activateStyle(styleId);
+      if (success) {
+        setActiveStyleId(styleId);
+      } else {
+        alert('Failed to activate style. Please try again.');
       }
     } catch (error) {
-      console.error('Error loading saved styles:', error);
+      console.error('Error activating style:', error);
+      alert('Failed to activate style. Please try again.');
     } finally {
-      setIsLoadingSaved(false);
+      setIsActivating(false);
     }
-  }, []);
+  };
 
-  // Load saved styles and active style on component mount
+  const handleNavigateHistory = (direction: 'back' | 'forward') => {
+    const newIndex = direction === 'back' ? historyIndex - 1 : historyIndex + 1;
+    if (newIndex >= 0 && newIndex < styleHistory.length) {
+      setHistoryIndex(newIndex);
+      const historyItem = styleHistory[newIndex];
+      setCurrentStyles(historyItem.style);
+      setSaveSuccess(false);
+      setSavedStyleId(historyItem.id || null);
+      setHasGeneratedStyles(newIndex > 0);
+    }
+  };
+
+  // Load all saved styles on mount
   useEffect(() => {
-    loadSavedStyles();
+    // Prevent multiple loads
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
 
-    // Load the active style ID
-    getActiveStyle().then(activeStyle => {
-      if (activeStyle) {
-        setActiveStyleId(activeStyle.id!);
+    const loadAllStyles = async () => {
+      try {
+        const savedStyles = await getSavedStyles();
+
+        if (savedStyles && savedStyles.length > 0) {
+          console.log(`Loading ${savedStyles.length} saved styles from database`);
+
+          // Build the complete history with default + all saved styles
+          const fullHistory: Array<{ style: EmailStyleJSON; id?: string }> = [
+            { style: defaultStyle }
+          ];
+
+          // Add each saved style (no duplicates)
+          const seenIds = new Set<string>();
+          for (const item of savedStyles) {
+            if (item.id && !seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              try {
+                const migratedStyle = migrateOldStyle(item.styling_json);
+                fullHistory.push({
+                  style: migratedStyle,
+                  id: item.id
+                });
+              } catch (e) {
+                console.error('Error migrating style:', e);
+              }
+            }
+          }
+
+          console.log(`Loaded history with ${fullHistory.length} total items (including default)`);
+          setStyleHistory(fullHistory);
+          setHistoryIndex(0);
+          setCurrentStyles(defaultStyle);
+        }
+
+        // Load the currently active style
+        const activeStyle = await getActiveStyle();
+        if (activeStyle) {
+          console.log('Found active style:', activeStyle.id);
+          setActiveStyleId(activeStyle.id!);
+        }
+
+      } catch (error) {
+        console.error('Error loading styles:', error);
       }
-    });
-  }, [loadSavedStyles]);
+    };
+
+    loadAllStyles();
+  }, []); // Empty dependency - run once on mount
 
   const examplePrompts = [
     "Cyberpunk theme with neon colors and tech vibes",
@@ -254,6 +264,14 @@ export default function StyleManager() {
       {/* Left Panel - Controls */}
       <div className="lg:w-1/2 p-6 bg-gray-50 overflow-y-auto">
         <div className="max-w-2xl mx-auto">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Home
+          </button>
+
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             BetterMail
           </h1>
@@ -338,7 +356,7 @@ export default function StyleManager() {
           {saveSuccess && (
             <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-3">
               <p className="text-sm text-green-800">
-                ✓ Style saved to database automatically!
+                ✓ Style saved to database!
               </p>
             </div>
           )}

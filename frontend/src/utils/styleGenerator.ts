@@ -1,4 +1,4 @@
-import { EmailStyleJSON } from '../types/email-styles';
+import type { EmailStyleJSON } from '../types/email-styles';
 
 // This function generates complete CSS styles for each email element based on a prompt
 // In production, this would be replaced by an LLM API call

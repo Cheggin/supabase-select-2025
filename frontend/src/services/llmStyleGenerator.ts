@@ -98,7 +98,7 @@ export class LLMStyleGenerator {
       validatedStyles[field] = stylesObj[field] || this.getDefaultStyleForField(field);
     }
 
-    return validatedStyles as EmailStyleJSON;
+    return validatedStyles as unknown as EmailStyleJSON;
   }
 
   // Get default style for a specific field

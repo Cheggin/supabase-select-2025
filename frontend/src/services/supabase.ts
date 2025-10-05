@@ -49,12 +49,13 @@ interface EmailStyleRecord {
 // Save email styles to Supabase with prompt
 export async function saveEmailStyle(styles: EmailStyleJSON, prompt: string = ''): Promise<{ id?: string; error?: string }> {
   try {
+    console.log('Saving style with active: false explicitly');
     const { data, error } = await supabase
       .from('email_styles')
       .insert([{
         styling_json: styles,
         user_prompt: prompt,
-        active: false
+        active: false  // EXPLICITLY set to false
       }])
       .select()
       .single();
@@ -64,6 +65,7 @@ export async function saveEmailStyle(styles: EmailStyleJSON, prompt: string = ''
       return { error: error.message };
     }
 
+    console.log('Style saved with ID:', data.id, 'Active status:', data.active);
     return { id: data.id };
   } catch (error) {
     console.error('Error saving style:', error);
@@ -77,7 +79,7 @@ export async function getSavedStyles(): Promise<EmailStyleRecord[]> {
     const { data, error } = await supabase
       .from('email_styles')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true }); // Order oldest first to maintain consistent order
 
     if (error) {
       console.error('Error fetching styles:', error);
