@@ -31,7 +31,9 @@ export class LLMStyleGenerator {
 
   constructor() {
     // Use backend endpoint which handles the Claude API call
-    this.apiUrl = 'http://localhost:8000/create-style';
+    // In production, use VITE_BACKEND_URL env var, fallback to localhost for development
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+    this.apiUrl = `${backendUrl}/create-style`;
   }
 
   // Generate styles using the backend /create-style endpoint

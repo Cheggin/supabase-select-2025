@@ -2,6 +2,7 @@
 # pip install fastapi uvicorn supabase anthropic resend python-dotenv
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -15,6 +16,20 @@ import httpx
 load_dotenv()
 
 app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Local development
+        "http://localhost:3000",  # Alternative local port
+        "https://*.vercel.app",   # All Vercel preview deployments
+        "*"                        # Allow all origins (you can restrict this later)
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize clients
 supabase: Client = create_client(
